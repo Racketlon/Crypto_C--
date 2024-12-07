@@ -1,10 +1,15 @@
-fn greet(name) {
-    print("Hello {name}")
+print("this is a test to handle different kind of things:")
+
+// Test if it can handle single line comments 
+fn say_hello(name) {
+    print("Hello {name}, nice to meet you :)") // Test if it can handle comments after a code
 }
 
-fn hello() {
-    print("Hello")
-}
+/*
+Test if it can handle
+Multi line comments
+like this
+*/
 
-greet("Andreas")
-hello()
+say_hello("Andreas")
+print("All tests are done :)")

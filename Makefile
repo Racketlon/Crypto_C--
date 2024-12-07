@@ -13,4 +13,4 @@ run:
 	./$(TARGET) tests/hello.crypto
 
 clean:
-	rm -f $(TARGET)
+	rm -rf $(TARGET)
