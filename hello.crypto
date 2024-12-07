@@ -1,15 +1,21 @@
-print("this is a test to handle different kind of things:")
+name = "Markus"
+age = 18
 
-// Test if it can handle single line comments 
-fn say_hello(name) {
-    print("Hello {name}, nice to meet you :)") // Test if it can handle comments after a code
+print("Hello {name}, you're {age} years old")
+
+is_adult = true
+print(is_adult)
+
+children = ["David", "Nick", "Emily"]
+print(children)
+print(children[2])
+
+cars = {"Mercedes": 1993, "Audi": 2001, "BMW": 1999}
+print(cars)
+print(cars["BMW"])
+
+fn greet(name) {
+    print("Hi {name} (I was called from a function)")
 }
 
-/*
-Test if it can handle
-Multi line comments
-like this
-*/
-
-say_hello("Andreas")
-print("All tests are done :)")
+greet("Andreas")

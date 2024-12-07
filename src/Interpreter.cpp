@@ -1,6 +1,7 @@
 #include "../include/Syntax.h"
 #include "../include/Print.h"
 #include "../include/Function.h"
+#include "../include/Variables.h"
 #include "../include/error.h"
 
 #include <fstream>
@@ -15,6 +16,7 @@ private:
     Syntax syntax;
     Print printModule;
     Function functionModule;
+    Variables variables;
 
 public:
     void interpret(const std::string& fileName) {
@@ -26,74 +28,15 @@ public:
 
         std::string line;
         int lineNumber = 0;
-        bool inFunctionDefinition = false;
-        bool inMultiLineComment = false;
-        std::string functionName, functionParams;
-        std::vector<std::string> functionBody;
 
         while (std::getline(file, line)) {
             ++lineNumber;
-
-            // Trim line
             line = trim(line);
 
-            // Handle multi-line comments
-            if (inMultiLineComment) {
-                if (line.find("*/") != std::string::npos) {
-                    inMultiLineComment = false;
-                }
-                continue;
-            }
-            if (line.find("/*") != std::string::npos) {
-                inMultiLineComment = true;
-                continue;
-            }
-
-            // Ignore single-line comments
-            size_t commentPos = line.find("//");
-            if (commentPos != std::string::npos) {
-                line = line.substr(0, commentPos);
-                line = trim(line);
-            }
-
-            // Skip empty lines
             if (line.empty()) continue;
 
-            // Handle function definitions and function calls
             try {
-                if (inFunctionDefinition) {
-                    if (line == "}") {
-                        functionModule.defineFunction(functionName, functionParams, functionBody);
-                        inFunctionDefinition = false;
-                        functionBody.clear();
-                        continue;
-                    }
-                    functionBody.push_back(line);
-                    continue;
-                }
-
-                if (std::regex_match(line, syntax.getFunctionDefinitionRegex())) {
-                    std::smatch match;
-                    std::regex_match(line, match, syntax.getFunctionDefinitionRegex());
-                    functionName = match[1];
-                    functionParams = match[2];
-                    inFunctionDefinition = true;
-                } else if (std::regex_match(line, syntax.getPrintRegex())) {
-                    // Explicitly handle `print` statements
-                    std::smatch match;
-                    std::regex_match(line, match, syntax.getPrintRegex());
-                    printModule.processPrint(match[1], syntax.getExpressionRegex(), functionModule, lineNumber);
-                } else if (std::regex_match(line, syntax.getFunctionCallRegex())) {
-                    std::smatch match;
-                    std::regex_match(line, match, syntax.getFunctionCallRegex());
-                    std::string functionName = match[1];
-                    std::vector<std::string> args = parseArguments(match[2]);
-                    functionModule.executeFunction(functionName, args, [&](const std::string& line) {
-                        interpretLine(line, lineNumber);
-                    });
-                } else {
-                    throw std::runtime_error("Unknown command or syntax");
-                }
+                interpretLine(line, lineNumber);
             } catch (const std::exception& e) {
                 reportError(lineNumber, line, e.what());
             }
@@ -105,23 +48,17 @@ public:
 private:
     void interpretLine(const std::string& line, int lineNumber) {
         try {
-            if (std::regex_match(line, syntax.getLambdaRegex())) {
+            if (std::regex_match(line, syntax.getVariableRegex())) {
                 std::smatch match;
-                std::regex_match(line, match, syntax.getLambdaRegex());
-                functionModule.defineLambda(match[1], match[2], match[3]);
+                std::regex_match(line, match, syntax.getVariableRegex());
+                std::string varName = match[1];
+                std::string value = match[2];
+                variables.setVariable(varName, value);
             } else if (std::regex_match(line, syntax.getPrintRegex())) {
-                // Explicitly handle `print` statements
                 std::smatch match;
                 std::regex_match(line, match, syntax.getPrintRegex());
-                printModule.processPrint(match[1], syntax.getExpressionRegex(), functionModule, lineNumber);
-            } else if (std::regex_match(line, syntax.getFunctionCallRegex())) {
-                std::smatch match;
-                std::regex_match(line, match, syntax.getFunctionCallRegex());
-                std::string functionName = match[1];
-                std::vector<std::string> args = parseArguments(match[2]);
-                functionModule.executeFunction(functionName, args, [&](const std::string& line) {
-                    interpretLine(line, lineNumber);
-                });
+                std::string content = match[1];
+                processPrint(content, lineNumber);
             } else {
                 throw std::runtime_error("Unknown command or syntax");
             }
@@ -130,19 +67,75 @@ private:
         }
     }
 
-    std::vector<std::string> parseArguments(const std::string& args) {
-        std::vector<std::string> parsedArgs;
-        std::istringstream argStream(args);
-        std::string arg;
+    void processPrint(const std::string& content, int lineNumber) {
+        try {
+            if (variables.hasVariable(content)) {
+                VariableValue value = variables.getVariable(content);
+                std::cout << variables.stringifyValue(value) << std::endl;
+            } else if (std::regex_match(content, std::regex(R"(^(\w+)\[(\d+)\]$)"))) {
+                std::smatch match;
+                std::regex_match(content, match, std::regex(R"(^(\w+)\[(\d+)\]$)"));
+                std::string varName = match[1];
+                int index = std::stoi(match[2]);
 
-        while (std::getline(argStream, arg, ',')) {
-            arg = trim(arg);
-            if (!arg.empty()) {
-                parsedArgs.push_back(arg);
+                if (!variables.hasVariable(varName)) {
+                    throw std::runtime_error("Undefined variable: " + varName);
+                }
+
+                VariableValue value = variables.getVariable(varName);
+                if (!std::holds_alternative<std::vector<std::string>>(value)) {
+                    throw std::runtime_error("Variable is not an array: " + varName);
+                }
+
+                const auto& array = std::get<std::vector<std::string>>(value);
+                if (index < 0 || index >= static_cast<int>(array.size())) {
+                    throw std::runtime_error("Index out of bounds: " + std::to_string(index));
+                }
+
+                std::cout << array[index] << std::endl;
+            } else if (std::regex_match(content, std::regex(R"(^(\w+)\["(.+)\"]$)"))) {
+                std::smatch match;
+                std::regex_match(content, match, std::regex(R"(^(\w+)\["(.+)\"]$)"));
+                std::string varName = match[1];
+                std::string key = match[2];
+
+                if (!variables.hasVariable(varName)) {
+                    throw std::runtime_error("Undefined variable: " + varName);
+                }
+
+                VariableValue value = variables.getVariable(varName);
+                if (!std::holds_alternative<std::map<std::string, int>>(value)) {
+                    throw std::runtime_error("Variable is not a dictionary: " + varName);
+                }
+
+                const auto& dictionary = std::get<std::map<std::string, int>>(value);
+                if (dictionary.find(key) == dictionary.end()) {
+                    throw std::runtime_error("Key not found in dictionary: " + key);
+                }
+
+                std::cout << dictionary.at(key) << std::endl;
+            } else {
+                std::string evaluatedContent = replaceVariables(content);
+                printModule.processPrint(evaluatedContent, syntax.getExpressionRegex(), functionModule, lineNumber);
             }
+        } catch (const std::exception& e) {
+            reportError(lineNumber, content, e.what());
         }
+    }
 
-        return parsedArgs;
+    std::string replaceVariables(const std::string& content) {
+        std::regex varRegex(R"(\{(\w+)\})");
+        std::smatch match;
+        std::string result = content;
+        while (std::regex_search(result, match, varRegex)) {
+            std::string varName = match[1];
+            if (!variables.hasVariable(varName)) {
+                throw std::runtime_error("Undefined variable: " + varName);
+            }
+            VariableValue value = variables.getVariable(varName);
+            result.replace(match.position(), match.length(), variables.stringifyValue(value));
+        }
+        return result;
     }
 
     void reportError(int lineNumber, const std::string& line, const std::string& message) {

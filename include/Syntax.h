@@ -15,6 +15,7 @@ public:
     std::regex getMultiLineCommentEndRegex() const { return std::regex(R"(.*\*/\s*)"); }
     std::regex getFunctionDefinitionRegex() const { return std::regex(R"(fn\s+(\w+)\((.*?)\)\s*\{)"); }
     std::regex getFunctionCallRegex() const { return std::regex(R"((\w+)\((.*?)\))"); }
+    std::regex getVariableRegex() const { return std::regex(R"(^(\w+)\s*=\s*(.*)$)"); }
 };
 
 #endif
